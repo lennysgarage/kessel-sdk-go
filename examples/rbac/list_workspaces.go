@@ -37,6 +37,7 @@ func listWorkspaces() {
 		}
 	}()
 
+	// Iterate one-by-one (lazy, constant memory)
 	fmt.Println("Listing workspaces:")
 	for resp, err := range v2.ListWorkspaces(ctx, inventoryClient, v2.PrincipalSubject("alice", "redhat"), "view_document", "") {
 		if err != nil {
@@ -45,6 +46,17 @@ func listWorkspaces() {
 		log.Printf("Response: %v", resp)
 		log.Printf("Continuation token: %v", resp.Pagination.GetContinuationToken())
 	}
+
+	// Materialise all workspaces into a slice
+	fmt.Println("\nCollecting all workspaces into a slice:")
+	var allWorkspaces []*v1beta2.StreamedListObjectsResponse
+	for resp, err := range v2.ListWorkspaces(ctx, inventoryClient, v2.PrincipalSubject("alice", "redhat"), "view_document", "") {
+		if err != nil {
+			log.Fatalf("Error listing workspaces: %v", err)
+		}
+		allWorkspaces = append(allWorkspaces, resp)
+	}
+	fmt.Printf("Total workspaces: %d\n", len(allWorkspaces))
 }
 
 func main() {

@@ -9,6 +9,28 @@ import (
 	v1beta2 "github.com/project-kessel/kessel-sdk-go/kessel/inventory/v1beta2"
 )
 
+// ListWorkspaces returns a lazy iterator over all workspaces that the given
+// subject has the specified relation to. It wraps the StreamedListObjects gRPC
+// call and automatically handles continuation-token pagination across pages.
+//
+// Iterate one-by-one (lazy, low memory):
+//
+//	for resp, err := range v2.ListWorkspaces(ctx, client, subject, "viewer", "") {
+//	    if err != nil {
+//	        log.Fatal(err)
+//	    }
+//	    fmt.Println(resp.Object.GetResourceId())
+//	}
+//
+// Materialise into a slice (eager, all results in memory):
+//
+//	var all []*v1beta2.StreamedListObjectsResponse
+//	for resp, err := range v2.ListWorkspaces(ctx, client, subject, "viewer", "") {
+//	    if err != nil {
+//	        log.Fatal(err)
+//	    }
+//	    all = append(all, resp)
+//	}
 func ListWorkspaces(
 	ctx context.Context,
 	inventory v1beta2.KesselInventoryServiceClient,
