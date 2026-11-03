@@ -13,6 +13,10 @@ import (
 
 const workspaceEndpoint = "/api/rbac/v2/workspaces/"
 
+// maxResponseBytes is the upper bound on RBAC workspace response body size.
+// Responses larger than this are rejected to prevent unbounded memory usage.
+const maxResponseBytes = 1 << 20 // 1 MiB
+
 type Workspace struct {
 	Id          string `json:"id"`
 	Name        string `json:"name"`
@@ -43,7 +47,7 @@ func fetchWorkspace(ctx context.Context, rbacBaseEndpoint string, orgId string, 
 
 	url := strings.TrimRight(rbacBaseEndpoint, "/") + workspaceEndpoint
 
-	request, err := http.NewRequest(http.MethodGet, url, nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -75,17 +79,19 @@ func fetchWorkspace(ctx context.Context, rbacBaseEndpoint string, orgId string, 
 		return nil, fmt.Errorf("error fetching %s workspace - http status %s", workspaceType, response.Status)
 	}
 
-	body, err := io.ReadAll(response.Body)
+	var workspaceResponse workspaceAPIResponse
 
+	body, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("error reading response body: %v", err)
 	}
-
-	var workspaceResponse workspaceAPIResponse
+	if int64(len(body)) > maxResponseBytes {
+		return nil, fmt.Errorf("error decoding response: body exceeds %d bytes", maxResponseBytes)
+	}
 
 	err = json.Unmarshal(body, &workspaceResponse)
 	if err != nil {
-		return nil, fmt.Errorf("error unmarshalling response: %v", err)
+		return nil, fmt.Errorf("error decoding response: %v", err)
 	}
 
 	if len(workspaceResponse.Data) != 1 {
