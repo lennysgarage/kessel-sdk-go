@@ -81,7 +81,15 @@ func fetchWorkspace(ctx context.Context, rbacBaseEndpoint string, orgId string, 
 
 	var workspaceResponse workspaceAPIResponse
 
-	err = json.NewDecoder(io.LimitReader(response.Body, maxResponseBytes)).Decode(&workspaceResponse)
+	body, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("error reading response body: %v", err)
+	}
+	if int64(len(body)) > maxResponseBytes {
+		return nil, fmt.Errorf("error decoding response: body exceeds %d bytes", maxResponseBytes)
+	}
+
+	err = json.Unmarshal(body, &workspaceResponse)
 	if err != nil {
 		return nil, fmt.Errorf("error decoding response: %v", err)
 	}

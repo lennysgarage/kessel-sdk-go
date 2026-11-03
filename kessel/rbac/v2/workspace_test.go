@@ -3,10 +3,12 @@ package v2
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/project-kessel/kessel-sdk-go/kessel/auth"
 )
@@ -488,11 +490,62 @@ func TestFetchWorkspace_ContextCancellation(t *testing.T) {
 	cancel() // cancel immediately
 
 	_, err := FetchDefaultWorkspace(ctx, server.URL, "org123", FetchWorkspaceOptions{
-		HttpClient: http.DefaultClient,
+		HttpClient: &http.Client{Timeout: 5 * time.Second},
 	})
 
-	if err == nil {
-		t.Error("Expected error from cancelled context, got nil")
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("Expected context.Canceled, got: %v", err)
+	}
+}
+
+func TestFetchWorkspace_InFlightCancellation(t *testing.T) {
+	handlerStarted := make(chan struct{})
+	handlerSawCancel := make(chan bool, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(handlerStarted)
+		select {
+		case <-r.Context().Done():
+			handlerSawCancel <- true
+		case <-time.After(5 * time.Second):
+			handlerSawCancel <- false
+		}
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := FetchDefaultWorkspace(ctx, server.URL, "org123", FetchWorkspaceOptions{
+			HttpClient: http.DefaultClient,
+		})
+		errCh <- err
+	}()
+
+	select {
+	case <-handlerStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("request did not reach the handler")
+	}
+	cancel()
+
+	select {
+	case err := <-errCh:
+		if err == nil {
+			t.Error("Expected error from in-flight cancellation, got nil")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("FetchDefaultWorkspace did not return after cancellation")
+	}
+
+	select {
+	case sawCancel := <-handlerSawCancel:
+		if !sawCancel {
+			t.Error("Handler did not observe request cancellation")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("handler did not return")
 	}
 }
 
