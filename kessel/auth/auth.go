@@ -287,10 +287,12 @@ func (o *OAuth2ClientCredentials) refreshToken(ctx context.Context, httpClient *
 	}
 
 	now := time.Now()
-	var expiresAt time.Time
-	if token.Expiry.After(now) {
-		expiresAt = now.Add(token.Expiry.Sub(now))
-	} else {
+	expiresAt := token.Expiry
+
+	// zitadel populates Expiry from expires_in and leaves ExpiresIn at zero.
+	// Fall back to ExpiresIn, then the default, only when Expiry is missing
+	// or already past.
+	if !expiresAt.After(now) {
 		expiresIn := token.ExpiresIn
 		if expiresIn <= 0 {
 			expiresIn = defaultExpiresIn
