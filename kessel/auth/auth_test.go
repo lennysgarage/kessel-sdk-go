@@ -488,34 +488,40 @@ func TestOAuth2ClientCredentials_refreshToken_UsesActualExpiry(t *testing.T) {
 		expiresIn        int
 		includeExpiresIn bool
 		expectedLifetime time.Duration
+		expectedValid    bool
 	}{
 		{
 			name:             "uses 900 second expiry",
 			expiresIn:        900,
 			includeExpiresIn: true,
 			expectedLifetime: 900 * time.Second,
+			expectedValid:    true,
 		},
 		{
-			name:             "uses 120 second expiry",
+			name:             "short 120 second expiry refreshes immediately",
 			expiresIn:        120,
 			includeExpiresIn: true,
 			expectedLifetime: 120 * time.Second,
+			expectedValid:    false,
 		},
 		{
 			name:             "uses 3600 second expiry",
 			expiresIn:        3600,
 			includeExpiresIn: true,
 			expectedLifetime: 3600 * time.Second,
+			expectedValid:    true,
 		},
 		{
 			name:             "defaults when expires_in is zero",
 			expiresIn:        0,
 			includeExpiresIn: true,
 			expectedLifetime: defaultExpiresIn * time.Second,
+			expectedValid:    true,
 		},
 		{
 			name:             "defaults when expires_in is missing",
 			expectedLifetime: defaultExpiresIn * time.Second,
+			expectedValid:    true,
 		},
 	}
 
@@ -547,6 +553,11 @@ func TestOAuth2ClientCredentials_refreshToken_UsesActualExpiry(t *testing.T) {
 			lifetime := result.ExpiresAt.Sub(start)
 			if lifetime < tt.expectedLifetime-2*time.Second || lifetime > tt.expectedLifetime+2*time.Second {
 				t.Errorf("Expected token lifetime %s, got %s", tt.expectedLifetime, lifetime)
+			}
+
+			credentials.cachedToken = result
+			if valid := credentials.isTokenValid(); valid != tt.expectedValid {
+				t.Errorf("Expected token valid to be %v, got %v", tt.expectedValid, valid)
 			}
 		})
 	}
