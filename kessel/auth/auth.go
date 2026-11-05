@@ -286,14 +286,21 @@ func (o *OAuth2ClientCredentials) refreshToken(ctx context.Context, httpClient *
 		return RefreshTokenResponse{}, err
 	}
 
-	expiresIn := token.ExpiresIn
-	if expiresIn == 0 {
-		expiresIn = defaultExpiresIn
+	now := time.Now()
+	var expiresAt time.Time
+	if token.Expiry.After(now) {
+		expiresAt = now.Add(token.Expiry.Sub(now))
+	} else {
+		expiresIn := token.ExpiresIn
+		if expiresIn <= 0 {
+			expiresIn = defaultExpiresIn
+		}
+		expiresAt = now.Add(time.Duration(expiresIn) * time.Second)
 	}
 
 	return RefreshTokenResponse{
 		AccessToken: token.AccessToken,
-		ExpiresAt:   time.Now().Add(time.Duration(expiresIn) * time.Second),
+		ExpiresAt:   expiresAt,
 	}, nil
 }
 
